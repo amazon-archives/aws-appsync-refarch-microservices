@@ -1,0 +1,594 @@
+{
+	"AWSTemplateFormatVersion": "2010-09-09",
+	"Description": "An auto-generated nested stack.",
+	"Metadata": {},
+	"Parameters": {
+		"AppSyncApiId": {
+			"Type": "String",
+			"Description": "The id of the AppSync API associated with this project."
+		},
+		"AppSyncApiName": {
+			"Type": "String",
+			"Description": "The name of the AppSync API",
+			"Default": "AppSyncSimpleTransform"
+		},
+		"env": {
+			"Type": "String",
+			"Description": "The environment name. e.g. Dev, Test, or Production",
+			"Default": "NONE"
+		},
+		"S3DeploymentBucket": {
+			"Type": "String",
+			"Description": "The S3 bucket containing all deployment assets for the project."
+		},
+		"S3DeploymentRootKey": {
+			"Type": "String",
+			"Description": "An S3 key relative to the S3DeploymentBucket that points to the root of the deployment directory."
+		},
+		"PaymentServiceEndpoint": {
+			"Type": "String",
+			"Description": "Payment service endpoint"
+		},
+		"PaymentServiceConsumerSecurityGroup": {
+			"Type": "String",
+			"Description": "Attach this to payment service consumer"
+		},
+		"PaymentServiceConsumerSubnet01": {
+			"Type": "String",
+			"Description": "Put payment service consumer in this private subnet 01"
+		},
+		"PaymentServiceConsumerSubnet02": {
+			"Type": "String",
+			"Description": "Put payment service consumer in this private subnet 02"
+		},
+		"UserServiceEndpoint": {
+			"Type": "String",
+			"Description" : "User service endpoint"
+		},
+		"UserServiceApiId": {
+			"Type": "String",
+			"Description" : "User service Api ID"
+		},
+		"OrderServiceEndpoint" : {
+			"Type" : "String",
+			"Description" : "Order Service Endpoint"
+		}
+	},
+	"Resources": {
+		"UserServiceDataSource": {
+			"Type": "AWS::AppSync::DataSource",
+			"Properties": {
+				"ApiId": {
+					"Ref": "AppSyncApiId"
+				},
+				"Description": "User service data source",
+				"HttpConfig": {
+					"Endpoint": {
+						"Ref": "UserServiceEndpoint"
+					},
+					"AuthorizationConfig": {
+						"AuthorizationType": "AWS_IAM",
+						"AwsIamConfig": {
+							"SigningRegion": { "Fn::Sub" : "${AWS::Region}" },
+							"SigningServiceName": "execute-api" 
+						}
+					}
+				},
+				"Name": { "Fn::Sub" : "${env}UserService" },
+				"Type": "HTTP",
+				"ServiceRoleArn" : {
+					"Fn::GetAtt": [
+						"UserServiceDataSourceIamRole",
+						"Arn"
+					]
+				}
+				}
+			},
+			"UserServiceDataSourceIamRole": {
+				"Type": "AWS::IAM::Role",
+				"Properties": {
+					"AssumeRolePolicyDocument": {
+						"Version": "2012-10-17",
+						"Statement": [
+							{
+								"Effect": "Allow",
+								"Principal": {
+									"Service": [
+										"appsync.amazonaws.com"
+									]
+								},
+								"Action": [
+									"sts:AssumeRole"
+								]
+							}
+						]
+					},
+					"Description": "Role assigned to UserServiceDataSource",
+					"Policies": [
+						{
+							"PolicyDocument" : {
+								"Version" : "2012-10-17",
+								"Statement" : [
+									{
+										"Action" : "execute-api:Invoke",
+										"Effect": "Allow",
+										"Resource" : { "Fn::Sub" : "arn:aws:execute-api:${AWS::Region}:*:${UserServiceApiId}/${env}/*" } 
+									}
+								]
+							},
+							"PolicyName" : "UserServiceDataSourceIamPolicy"
+						}
+					]
+				}
+			},
+		"QueryGetUserInfoResolver": {
+			"Type": "AWS::AppSync::Resolver",
+			"Properties": {
+				"ApiId": {
+					"Ref": "AppSyncApiId"
+				},
+				"DataSourceName": {
+					"Fn::GetAtt": [
+						"UserServiceDataSource",
+						"Name"
+					]
+				},
+				"FieldName": "getUserInfo",
+				"Kind": "UNIT",
+				"TypeName": "Query",
+				"RequestMappingTemplateS3Location": {
+					"Fn::Sub": "s3://${S3DeploymentBucket}/${S3DeploymentRootKey}/resolvers/Query.getUserInfo.req.vtl"
+				},
+				"ResponseMappingTemplateS3Location": {
+					"Fn::Sub": "s3://${S3DeploymentBucket}/${S3DeploymentRootKey}/resolvers/Query.getUserInfo.res.vtl"
+				}
+			}
+		},
+		"PaymentServiceDataSource": {
+			"Type": "AWS::AppSync::DataSource",
+			"Properties": {
+				"ApiId": {
+					"Ref": "AppSyncApiId"
+				},
+				"Description": "Payment Service data source",
+				"LambdaConfig": {
+					"LambdaFunctionArn": {
+						"Fn::GetAtt": [
+							"PaymentServiceDataSourceLambda",
+							"Arn"
+						]
+					}
+				},
+				"Name": {
+					"Fn::Sub": "${env}PaymentService"
+				},
+				"Type": "AWS_LAMBDA",
+				"ServiceRoleArn": {
+					"Fn::GetAtt": [
+						"PaymentServiceDataSourceIamRole",
+						"Arn"
+					]
+				}
+			}
+		},
+		"PaymentServiceDataSourceLambda": {
+			"Type": "AWS::Lambda::Function",
+			"Properties": {
+				"Code": {
+					"ZipFile": {
+						"Fn::Join": [
+							"\n",
+							[
+								"import os",
+								"import logging",
+								"import sys",
+								"import json",
+								"import urllib3",
+								"",
+								"http = urllib3.PoolManager()",
+								"",
+								"LOG_LEVEL = os.environ.get('LOG_LEVEL', '').upper()",
+								"if LOG_LEVEL == '':",
+								"   LOG_LEVEL = 'INFO'",
+								"",
+								"logger = logging.getLogger()",
+								"logger.setLevel(LOG_LEVEL)",
+								"",
+								"def main(event, context):",
+								"   logging.info('Incoming Event: {0}'.format(event))",
+								"   response_body = {}",
+								"",
+								"   if event['resolverType'] == 'Query':",
+								"       get_payment_accounts_request = http.request('GET', os.environ['PAYMENT_SERVICE_ENDPOINT'] + (os.environ['PATH_GET_PAYMENT_ACCOUNTS']).replace('userId', event['userId']))",
+								"",
+								"       logging.info('ResponseCode: {0}'.format(get_payment_accounts_request.status))",
+								"       if get_payment_accounts_request.status == 200:",
+								"           response_body = json.loads(get_payment_accounts_request.data)",
+								"       else:",
+								"           logging.error('Error: {0}'.format(sys.exc_info()))",
+								"           raise Exception('Payment Details not found')",
+								"",
+								"   elif event['resolverType'] == 'Mutation':",
+								"",
+								"       request_body = {}",
+								"       request_body['userId'] = event['userId']",
+								"       request_body['type'] = event['type']",
+								"       request_body['details'] = event['details']",
+								
+								"       add_payment_account_request = http.request(",
+								"          'POST',",
+								"          os.environ['PAYMENT_SERVICE_ENDPOINT'] + os.environ['PATH_ADD_PAYMENT_ACCOUNT'],",
+								"          body=json.dumps(request_body).encode('utf-8'),",
+								"          headers={'Content-Type': 'application/json'})",
+						 
+								"       logging.info('Response: {0}'.format(add_payment_account_request.data))",
+								
+								"       if add_payment_account_request.status == 200:",
+								"          response_body = json.loads(add_payment_account_request.data)",
+								"       else:",
+								"          logging.error('Error: {0}'.format(sys.exc_info()))",
+								"          raise Exception('Unable to save payment details. Please try again.')",
+								"",
+								"   return response_body"
+							]
+						]
+					}
+				},
+				"Environment": {
+					"Variables": {
+						"PAYMENT_SERVICE_ENDPOINT": {
+							"Ref": "PaymentServiceEndpoint"
+						},
+						"PATH_ADD_PAYMENT_ACCOUNT": "/payments/account",
+						"PATH_GET_PAYMENT_ACCOUNTS": "/payments/accounts/userId",
+						"LOG_LEVEL": "INFO"
+					}
+				},
+				"FunctionName": {
+					"Fn::Sub": "${env}-PaymentServiceDataSource"
+				},
+				"Handler": "index.main",
+				"MemorySize": 512,
+				"Role": {
+					"Fn::GetAtt": [
+						"PaymentServiceDataSourceLambdaIamRole",
+						"Arn"
+					]
+				},
+				"Runtime": "python3.7",
+				"Timeout": 30,
+				"VpcConfig": {
+					"SecurityGroupIds": [
+						{
+							"Ref": "PaymentServiceConsumerSecurityGroup"
+						}
+					],
+					"SubnetIds": [
+						{
+							"Ref": "PaymentServiceConsumerSubnet01"
+						},
+						{
+							"Ref": "PaymentServiceConsumerSubnet02"
+						}
+					]
+				}
+			}
+		},
+		"PaymentServiceDataSourceLambdaIamRole": {
+			"Type": "AWS::IAM::Role",
+			"Properties": {
+				"AssumeRolePolicyDocument": {
+					"Version": "2012-10-17",
+					"Statement": [
+						{
+							"Effect": "Allow",
+							"Principal": {
+								"Service": [
+									"lambda.amazonaws.com"
+								]
+							},
+							"Action": [
+								"sts:AssumeRole"
+							]
+						}
+					]
+				},
+				"Description": "Role assigned to PaymentServiceDataSource Lambda",
+				"ManagedPolicyArns": [
+					"arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+					"arn:aws:iam::aws:policy/service-role/AWSLambdaENIManagementAccess"
+				]
+			}
+		},
+		"PaymentServiceDataSourceIamRole": {
+			"Type": "AWS::IAM::Role",
+			"Properties": {
+				"AssumeRolePolicyDocument": {
+					"Version": "2012-10-17",
+					"Statement": [
+						{
+							"Effect": "Allow",
+							"Principal": {
+								"Service": [
+									"appsync.amazonaws.com"
+								]
+							},
+							"Action": [
+								"sts:AssumeRole"
+							]
+						}
+					]
+				},
+				"Description": "Role assigned to PaymentServiceDataSource",
+				"Policies": [
+					{
+						"PolicyDocument": {
+							"Version": "2012-10-17",
+							"Statement": [
+								{
+									"Action": "lambda:InvokeFunction",
+									"Effect": "Allow",
+									"Resource": {
+										"Fn::GetAtt": [
+											"PaymentServiceDataSourceLambda",
+											"Arn"
+										]
+									}
+								}
+							]
+						},
+						"PolicyName": "AppSyncLambdaInvokePolicy"
+					}
+				]
+			}
+		},
+		"QueryGetPaymentMethodsResolver": {
+			"Type": "AWS::AppSync::Resolver",
+			"Properties": {
+				"ApiId": {
+					"Ref": "AppSyncApiId"
+				},
+				"DataSourceName": {
+					"Fn::GetAtt": [
+						"PaymentServiceDataSource",
+						"Name"
+					]
+				},
+				"FieldName": "getPaymentAccounts",
+				"Kind": "UNIT",
+				"TypeName": "Query",
+				"RequestMappingTemplateS3Location": {
+					"Fn::Sub": [
+						"s3://${S3DeploymentBucket}/${S3DeploymentRootKey}/resolvers/Query.getPaymentAccounts.req.vtl",
+						{
+							"S3DeploymentBucket": {
+								"Ref": "S3DeploymentBucket"
+							},
+							"S3DeploymentRootKey": {
+								"Ref": "S3DeploymentRootKey"
+							}
+						}
+					]
+				},
+				"ResponseMappingTemplateS3Location": {
+					"Fn::Sub": [
+						"s3://${S3DeploymentBucket}/${S3DeploymentRootKey}/resolvers/Query.getPaymentAccounts.res.vtl",
+						{
+							"S3DeploymentBucket": {
+								"Ref": "S3DeploymentBucket"
+							},
+							"S3DeploymentRootKey": {
+								"Ref": "S3DeploymentRootKey"
+							}
+						}
+					]
+				}
+			}
+		},
+		"MutationAddPaymentResolver": {
+			"Type": "AWS::AppSync::Resolver",
+			"Properties": {
+				"ApiId": {
+					"Ref": "AppSyncApiId"
+				},
+				"DataSourceName": {
+					"Fn::GetAtt": [
+						"PaymentServiceDataSource",
+						"Name"
+					]
+				},
+				"FieldName": "addPaymentAccount",
+				"Kind": "UNIT",
+				"TypeName": "Mutation",
+				"RequestMappingTemplateS3Location": {
+					"Fn::Sub": [
+						"s3://${S3DeploymentBucket}/${S3DeploymentRootKey}/resolvers/Mutation.addPaymentAccount.req.vtl",
+						{
+							"S3DeploymentBucket": {
+								"Ref": "S3DeploymentBucket"
+							},
+							"S3DeploymentRootKey": {
+								"Ref": "S3DeploymentRootKey"
+							}
+						}
+					]
+				},
+				"ResponseMappingTemplateS3Location": {
+					"Fn::Sub": [
+						"s3://${S3DeploymentBucket}/${S3DeploymentRootKey}/resolvers/Mutation.addPaymentAccount.res.vtl",
+						{
+							"S3DeploymentBucket": {
+								"Ref": "S3DeploymentBucket"
+							},
+							"S3DeploymentRootKey": {
+								"Ref": "S3DeploymentRootKey"
+							}
+						}
+					]
+				}
+			}
+		},
+		"OrderServiceDataSource": {
+			"Type": "AWS::AppSync::DataSource",
+			"Properties": {
+				"ApiId": {
+					"Ref": "AppSyncApiId"
+				},
+				"Description": "Order service data source",
+				"HttpConfig": {
+					"Endpoint": {
+						"Ref": "OrderServiceEndpoint"
+					},
+					"AuthorizationConfig": {
+						"AuthorizationType": "AWS_IAM",
+						"AwsIamConfig": {
+							"SigningRegion": { "Fn::Sub" : "${AWS::Region}" },
+							"SigningServiceName": "appsync" 
+						}
+					}
+				},
+				"Name": { "Fn::Sub" : "${env}OrderService" },
+				"Type": "HTTP",
+				"ServiceRoleArn" : {
+					"Fn::GetAtt": [
+						"OrderServiceDataSourceIamRole",
+						"Arn"
+					]
+				}
+				}
+			},
+		"OrderServiceDataSourceIamRole": {
+				"Type": "AWS::IAM::Role",
+				"Properties": {
+					"AssumeRolePolicyDocument": {
+						"Version": "2012-10-17",
+						"Statement": [
+							{
+								"Effect": "Allow",
+								"Principal": {
+									"Service": [
+										"appsync.amazonaws.com"
+									]
+								},
+								"Action": [
+									"sts:AssumeRole"
+								]
+							}
+						]
+					},
+					"Description": "Role assigned to OrderServiceDataSource",
+					"Policies": [
+						{
+							"PolicyDocument" : {
+								"Version" : "2012-10-17",
+								"Statement" : [
+									{
+										"Action" : "appsync:GraphQL",
+										"Effect": "Allow",
+										"Resource" : { "Fn::Sub" : "arn:aws:appsync:${AWS::Region}:${AWS::AccountId}:apis/*" } 
+									}
+								]
+							},
+							"PolicyName" : "OrderServiceDataSourceIamPolicy"
+						}
+					]
+				}
+			},
+		"QueryListRecentOrdersResolver": {
+				"Type": "AWS::AppSync::Resolver",
+				"Properties": {
+					"ApiId": {
+						"Ref": "AppSyncApiId"
+					},
+					"DataSourceName": {
+						"Fn::GetAtt": [
+							"OrderServiceDataSource",
+							"Name"
+						]
+					},
+					"FieldName": "listRecentOrders",
+					"Kind": "UNIT",
+					"TypeName": "Query",
+					"RequestMappingTemplateS3Location": {
+						"Fn::Sub": "s3://${S3DeploymentBucket}/${S3DeploymentRootKey}/resolvers/Query.listRecentOrders.req.vtl"
+					},
+					"ResponseMappingTemplateS3Location": {
+						"Fn::Sub": "s3://${S3DeploymentBucket}/${S3DeploymentRootKey}/resolvers/Query.listRecentOrders.res.vtl"
+					}
+				}
+			},
+		"QueryListRecentOrdersByStatusResolver": {
+				"Type": "AWS::AppSync::Resolver",
+				"Properties": {
+					"ApiId": {
+						"Ref": "AppSyncApiId"
+					},
+					"DataSourceName": {
+						"Fn::GetAtt": [
+							"OrderServiceDataSource",
+							"Name"
+						]
+					},
+					"FieldName": "listRecentOrdersByStatus",
+					"Kind": "UNIT",
+					"TypeName": "Query",
+					"RequestMappingTemplateS3Location": {
+						"Fn::Sub": "s3://${S3DeploymentBucket}/${S3DeploymentRootKey}/resolvers/Query.listRecentOrdersByStatus.req.vtl"
+					},
+					"ResponseMappingTemplateS3Location": {
+						"Fn::Sub": "s3://${S3DeploymentBucket}/${S3DeploymentRootKey}/resolvers/Query.listRecentOrdersByStatus.res.vtl"
+					}
+				}
+			},
+		"MutationAddOrderResolver": {
+				"Type": "AWS::AppSync::Resolver",
+				"Properties": {
+					"ApiId": {
+						"Ref": "AppSyncApiId"
+					},
+					"DataSourceName": {
+						"Fn::GetAtt": [
+							"OrderServiceDataSource",
+							"Name"
+						]
+					},
+					"FieldName": "addOrder",
+					"Kind": "UNIT",
+					"TypeName": "Mutation",
+					"RequestMappingTemplateS3Location": {
+						"Fn::Sub": "s3://${S3DeploymentBucket}/${S3DeploymentRootKey}/resolvers/Mutation.addOrder.req.vtl"
+					},
+					"ResponseMappingTemplateS3Location": {
+						"Fn::Sub": "s3://${S3DeploymentBucket}/${S3DeploymentRootKey}/resolvers/Mutation.addOrder.res.vtl"
+					}
+				}
+			}
+
+	},
+	"Conditions": {
+		"HasEnvironmentParameter": {
+			"Fn::Not": [
+				{
+					"Fn::Equals": [
+						{
+							"Ref": "env"
+						},
+						"NONE"
+					]
+				}
+			]
+		},
+		"AlwaysFalse": {
+			"Fn::Equals": [
+				"true",
+				"false"
+			]
+		}
+	},
+	"Outputs": {
+		"EmptyOutput": {
+			"Description": "An empty output. You may delete this if you have at least one resource above.",
+			"Value": ""
+		}
+	}
+}

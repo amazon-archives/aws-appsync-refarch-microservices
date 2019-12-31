@@ -1,0 +1,791 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Root stack for the Amplify AWS CloudFormation provider",
+    "Parameters": {
+        "VpcCidr": {
+            "Description": "VPC CIDR Range",
+            "Type": "String",
+            "Default": "10.10.0.0/16"
+        },
+        "FargateTaskSubnet01Cidr": {
+            "Description": "FargateTaskSubnet01Cidr",
+            "Type": "String",
+            "Default": "10.10.1.0/24"
+        },
+        "FargateTaskSubnet02Cidr": {
+            "Description": "FargateTaskSubnet01Cidr",
+            "Type": "String",
+            "Default": "10.10.2.0/24"
+        },
+        "LoadBalancerSubnet01Cidr": {
+            "Description": "LoadBalancerSubnet01Cidr",
+            "Type": "String",
+            "Default": "10.10.3.0/24"
+        },
+        "LoadBalancerSubnet02Cidr": {
+            "Description": "LoadBalancerSubnet01Cidr",
+            "Type": "String",
+            "Default": "10.10.4.0/24"
+        },
+        "env": {
+            "Type": "String",
+            "Description": "The environment name. e.g. Dev, Test, or Production",
+            "Default": "NONE"
+        }
+    },
+    "Resources": {
+        "VPC": {
+            "Type": "AWS::EC2::VPC",
+            "Properties": {
+                "CidrBlock": {
+                    "Ref": "VpcCidr"
+                },
+                "EnableDnsHostnames": true,
+                "EnableDnsSupport": true,
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "PaymentServiceVpc"
+                    }
+                ]
+            }
+        },
+        "FargateTaskSubnet01": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "AvailabilityZone": {
+                    "Fn::Select": [
+                        0,
+                        {
+                            "Fn::GetAZs": ""
+                        }
+                    ]
+                },
+                "CidrBlock": {
+                    "Ref": "FargateTaskSubnet01Cidr"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "FargateTaskSubnet01"
+                    }
+                ],
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            }
+        },
+        "FargateTaskSubnet02": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "AvailabilityZone": {
+                    "Fn::Select": [
+                        1,
+                        {
+                            "Fn::GetAZs": ""
+                        }
+                    ]
+                },
+                "CidrBlock": {
+                    "Ref": "FargateTaskSubnet02Cidr"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "FargateTaskSubnet02"
+                    }
+                ],
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            }
+        },
+        "LoadBalancerSubnet01": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "AvailabilityZone": {
+                    "Fn::Select": [
+                        0,
+                        {
+                            "Fn::GetAZs": ""
+                        }
+                    ]
+                },
+                "CidrBlock": {
+                    "Ref": "LoadBalancerSubnet01Cidr"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "LoadBalancerSubnet01"
+                    }
+                ],
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            }
+        },
+        "LoadBalancerSubnet02": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "AvailabilityZone": {
+                    "Fn::Select": [
+                        1,
+                        {
+                            "Fn::GetAZs": ""
+                        }
+                    ]
+                },
+                "CidrBlock": {
+                    "Ref": "LoadBalancerSubnet02Cidr"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "LoadBalancerSubnet02"
+                    }
+                ],
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            }
+        },
+        "FargateTaskSubnetRouteTable": {
+            "Type": "AWS::EC2::RouteTable",
+            "Properties": {
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "FargateTaskSubnetRouteTable"
+                    }
+                ],
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            }
+        },
+        "FargateTaskSubnetRouteTableAssociation01": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "FargateTaskSubnetRouteTable"
+                },
+                "SubnetId": {
+                    "Ref": "FargateTaskSubnet01"
+                }
+            }
+        },
+        "FargateTaskSubnetRouteTableAssociation02": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "FargateTaskSubnetRouteTable"
+                },
+                "SubnetId": {
+                    "Ref": "FargateTaskSubnet02"
+                }
+            }
+        },
+        "FargateTaskSecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "VPC"
+                },
+                "GroupDescription": "security group associate with fargate task",
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "7000",
+                        "ToPort": "7000",
+                        "SourceSecurityGroupId": {
+                            "Ref": "LoadBalancerSecurityGroup"
+                        }
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "FargateTaskSecurityGroup"
+                    }
+                ]
+            }
+        },
+        "LoadBalancerSecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "VPC"
+                },
+                "GroupDescription": "security group associate with load balancer",
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "80",
+                        "ToPort": "80",
+                        "SourceSecurityGroupId": {
+                            "Ref": "ConsumerSecurityGroup"
+                        }
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "LoadBalancerSecurityGroup"
+                    }
+                ]
+            }
+        },
+        "ConsumerSecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "VPC"
+                },
+                "GroupDescription": "security group associated with LoadBalancer client",
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "ConsumerSecurityGroup"
+                    }
+                ]
+            }
+        },
+        "EndpointSecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "VPC"
+                },
+                "GroupDescription": "EndpointSecurityGroup",
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "443",
+                        "ToPort": "443",
+                        "CidrIp": {
+                            "Ref": "VpcCidr"
+                        }
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "EndpointSecurityGroup"
+                    }
+                ]
+            }
+        },
+        "ECRPrivateEndpoint": {
+            "Type": "AWS::EC2::VPCEndpoint",
+            "Properties": {
+                "PrivateDnsEnabled": true,
+                "SecurityGroupIds": [
+                    {
+                        "Ref": "EndpointSecurityGroup"
+                    }
+                ],
+                "ServiceName": {
+                    "Fn::Sub": "com.amazonaws.${AWS::Region}.ecr.dkr"
+                },
+                "SubnetIds": [
+                    {
+                        "Ref": "FargateTaskSubnet01"
+                    },
+                    {
+                        "Ref": "FargateTaskSubnet02"
+                    }
+                ],
+                "VpcEndpointType": "Interface",
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            }
+        },
+        "S3GatewayEndpoint": {
+            "Type": "AWS::EC2::VPCEndpoint",
+            "Properties": {
+                "RouteTableIds": [
+                    {
+                        "Ref": "FargateTaskSubnetRouteTable"
+                    }
+                ],
+                "ServiceName": {
+                    "Fn::Sub": "com.amazonaws.${AWS::Region}.s3"
+                },
+                "VpcEndpointType": "Gateway",
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            }
+        },
+        "DDBGatewayEndpoint": {
+            "Type": "AWS::EC2::VPCEndpoint",
+            "Properties": {
+                "RouteTableIds": [
+                    {
+                        "Ref": "FargateTaskSubnetRouteTable"
+                    }
+                ],
+                "ServiceName": {
+                    "Fn::Sub": "com.amazonaws.${AWS::Region}.dynamodb"
+                },
+                "VpcEndpointType": "Gateway",
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            }
+        },
+        "LogsPrivateEndpoint": {
+            "Type": "AWS::EC2::VPCEndpoint",
+            "Properties": {
+                "PrivateDnsEnabled": true,
+                "SecurityGroupIds": [
+                    {
+                        "Ref": "EndpointSecurityGroup"
+                    }
+                ],
+                "ServiceName": {
+                    "Fn::Sub": "com.amazonaws.${AWS::Region}.logs"
+                },
+                "SubnetIds": [
+                    {
+                        "Ref": "LoadBalancerSubnet01"
+                    },
+                    {
+                        "Ref": "LoadBalancerSubnet02"
+                    }
+                ],
+                "VpcEndpointType": "Interface",
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            }
+        },
+        "LoadBalancer": {
+            "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+            "Properties": {
+                "SecurityGroups": [
+                    {
+                        "Ref": "LoadBalancerSecurityGroup"
+                    }
+                ],
+                "Subnets": [
+                    {
+                        "Ref": "LoadBalancerSubnet01"
+                    },
+                    {
+                        "Ref": "LoadBalancerSubnet02"
+                    }
+                ],
+                "Scheme": "internal"
+            }
+        },
+        "HTTPlistener": {
+            "Type": "AWS::ElasticLoadBalancingV2::Listener",
+            "Properties": {
+                "DefaultActions": [
+                    {
+                        "Type": "fixed-response",
+                        "FixedResponseConfig": {
+                            "ContentType": "application/json",
+                            "StatusCode": "404"
+                        }
+                    }
+                ],
+                "LoadBalancerArn": {
+                    "Ref": "LoadBalancer"
+                },
+                "Port": 80,
+                "Protocol": "HTTP"
+            }
+        },
+        "PaymentTaskTargetGroup": {
+            "Type": "AWS::ElasticLoadBalancingV2::TargetGroup",
+            "DependsOn": [
+                "LoadBalancer"
+            ],
+            "Properties": {
+                "Name": {
+                    "Fn::Sub": "${env}-PaymentTaskTargetGroup"
+                },
+                "HealthCheckIntervalSeconds": 5,
+                "HealthCheckTimeoutSeconds": 2,
+                "HealthyThresholdCount": 2,
+                "HealthCheckPath": "/payments/health",
+                "HealthCheckPort": 7000,
+                "HealthCheckProtocol": "HTTP",
+                "TargetType": "ip",
+                "Port": 7000,
+                "Protocol": "HTTP",
+                "UnhealthyThresholdCount": 2,
+                "VpcId": {
+                    "Ref": "VPC"
+                },
+                "TargetGroupAttributes": [
+                    {
+                        "Key": "deregistration_delay.timeout_seconds",
+                        "Value": "10"
+                    }
+                ]
+            }
+        },
+        "LoadBalancerListenerRuleGET": {
+            "Type": "AWS::ElasticLoadBalancingV2::ListenerRule",
+            "Properties": {
+                "Actions": [
+                    {
+                        "TargetGroupArn": {
+                            "Ref": "PaymentTaskTargetGroup"
+                        },
+                        "Type": "forward"
+                    }
+                ],
+                "Conditions": [
+                    {
+                        "Field": "path-pattern",
+                        "PathPatternConfig": {
+                            "Values": [
+                                "/payments/accounts/*"
+                            ]
+                        }
+                    },
+                    {
+                        "Field": "http-request-method",
+                        "HttpRequestMethodConfig": {
+                            "Values": [
+                                "GET"
+                            ]
+                        }
+                    }
+                ],
+                "ListenerArn": {
+                    "Ref": "HTTPlistener"
+                },
+                "Priority": 1
+            }
+        },
+        "LoadBalancerListenerRulePOST": {
+            "Type": "AWS::ElasticLoadBalancingV2::ListenerRule",
+            "Properties": {
+                "Actions": [
+                    {
+                        "TargetGroupArn": {
+                            "Ref": "PaymentTaskTargetGroup"
+                        },
+                        "Type": "forward"
+                    }
+                ],
+                "Conditions": [
+                    {
+                        "Field": "path-pattern",
+                        "PathPatternConfig": {
+                            "Values": [
+                                "/payments/account"
+                            ]
+                        }
+                    },
+                    {
+                        "Field": "http-request-method",
+                        "HttpRequestMethodConfig": {
+                            "Values": [
+                                "POST"
+                            ]
+                        }
+                    }
+                ],
+                "ListenerArn": {
+                    "Ref": "HTTPlistener"
+                },
+                "Priority": 2
+            }
+        },
+        "PaymentTaskLogGroup": {
+            "Type": "AWS::Logs::LogGroup",
+            "Properties": {
+                "RetentionInDays": 7
+            }
+        },
+        "PaymentServiceDefinition": {
+            "Type": "AWS::ECS::TaskDefinition",
+            "DependsOn": [
+                "PaymentTaskLogGroup"
+            ],
+            "Properties": {
+                "ContainerDefinitions": [
+                    {
+                        "Name": "PaymentApp",
+                        "Image": {
+                            "Fn::Sub": "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/paymentapp:v1"
+                        },
+                        "Cpu": "512",
+                        "Memory": "1024",
+                        "Environment": [
+                            {
+                                "Name": "PaymentAccountTableName",
+                                "Value": {
+                                    "Ref": "PaymentAccountTable"
+                                }
+                            },
+                            {
+                                "Name": "AWS_REGION",
+                                "Value": {
+                                    "Fn::Sub": "${AWS::Region}"
+                                }
+                            }
+                        ],
+                        "PortMappings": [
+                            {
+                                "ContainerPort": 7000
+                            }
+                        ],
+                        "LogConfiguration": {
+                            "LogDriver": "awslogs",
+                            "Options": {
+                                "awslogs-group": {
+                                    "Ref": "PaymentTaskLogGroup"
+                                },
+                                "awslogs-region": {
+                                    "Fn::Sub": "${AWS::Region}"
+                                },
+                                "awslogs-stream-prefix": "fargate"
+                            }
+                        }
+                    }
+                ],
+                "Cpu": "512",
+                "Memory": "1024",
+                "Family": {
+                    "Fn::Sub": "${env}-PaymentService"
+                },
+                "NetworkMode": "awsvpc",
+                "RequiresCompatibilities": [
+                    "FARGATE"
+                ],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "PaymentServiceTaskDefinition"
+                    }
+                ],
+                "ExecutionRoleArn": {
+                    "Fn::GetAtt": [
+                        "TaskExecutionRole",
+                        "Arn"
+                    ]
+                },
+                "TaskRoleArn": {
+                    "Fn::GetAtt": [
+                        "TaskIAMRole",
+                        "Arn"
+                    ]
+                }
+            }
+        },
+        "ECSCluster": {
+            "Type": "AWS::ECS::Cluster",
+            "Properties": {
+                "ClusterName": {
+                    "Fn::Sub": "${env}-PaymentServiceCluster"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Sub": "${env}-PaymentServiceCluster"
+                        }
+                    }
+                ]
+            }
+        },
+        "Service": {
+            "Type": "AWS::ECS::Service",
+            "DependsOn": [
+                "LoadBalancerListenerRuleGET",
+                "LoadBalancerListenerRulePOST"
+            ],
+            "Properties": {
+                "ServiceName": {
+                    "Fn::Sub": "${env}-PaymentService"
+                },
+                "Cluster": {
+                    "Ref": "ECSCluster"
+                },
+                "DeploymentConfiguration": {
+                    "MaximumPercent": 200,
+                    "MinimumHealthyPercent": 75
+                },
+                "DesiredCount": 2,
+                "HealthCheckGracePeriodSeconds": 10,
+                "LaunchType": "FARGATE",
+                "LoadBalancers": [
+                    {
+                        "ContainerName": "PaymentApp",
+                        "ContainerPort": 7000,
+                        "TargetGroupArn": {
+                            "Ref": "PaymentTaskTargetGroup"
+                        }
+                    }
+                ],
+                "NetworkConfiguration": {
+                    "AwsvpcConfiguration": {
+                        "SecurityGroups": [
+                            {
+                                "Ref": "FargateTaskSecurityGroup"
+                            }
+                        ],
+                        "Subnets": [
+                            {
+                                "Ref": "FargateTaskSubnet01"
+                            },
+                            {
+                                "Ref": "FargateTaskSubnet02"
+                            }
+                        ]
+                    }
+                },
+                "TaskDefinition": {
+                    "Ref": "PaymentServiceDefinition"
+                }
+            }
+        },
+        "TaskIAMRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "ecs-tasks.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "Policies": [
+                    {
+                        "PolicyName": "PaymentTaskDDBPolicy",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "dynamodb:Query",
+                                        "dynamodb:PutItem"
+                                    ],
+                                    "Resource": {
+                                        "Fn::GetAtt": [
+                                            "PaymentAccountTable",
+                                            "Arn"
+                                        ]
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "TaskExecutionRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "ecs-tasks.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "Path": "/",
+                "ManagedPolicyArns": [
+                    "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+                ],
+                "RoleName": {
+                    "Fn::Sub": "${env}-PaymentTaskExecutionRole"
+                }
+            }
+        },
+        "PaymentAccountTable": {
+            "Type": "AWS::DynamoDB::Table",
+            "Properties": {
+                "AttributeDefinitions": [
+                    {
+                        "AttributeName": "userId",
+                        "AttributeType": "S"
+                    },
+                    {
+                        "AttributeName": "type",
+                        "AttributeType": "S"
+                    }
+                ],
+                "KeySchema": [
+                    {
+                        "AttributeName": "userId",
+                        "KeyType": "HASH"
+                    },
+                    {
+                        "AttributeName": "type",
+                        "KeyType": "RANGE"
+                    }
+                ],
+                "BillingMode": "PAY_PER_REQUEST",
+                "Tags": [
+                    {
+                        "Key": "Env",
+                        "Value": {
+                            "Ref": "env"
+                        }
+                    }
+                ]
+            }
+        }
+    },
+    "Outputs": {
+        "PaymentServiceEndpoint": {
+            "Value": {
+                "Fn::Sub": "http://${LoadBalancer.DNSName}"
+            },
+            "Description": "Payment Service Endpoint"
+        },
+        "ConsumerSubnet01": {
+            "Value": {
+                "Ref": "LoadBalancerSubnet01"
+            },
+            "Description": "PrivateSubnet01 for consumers"
+        },
+        "ConsumerSubnet02": {
+            "Value": {
+                "Ref": "LoadBalancerSubnet02"
+            },
+            "Description": "PrivateSubnet02 for consumers"
+        },
+        "ConsumerSecurityGroup": {
+            "Value": {
+                "Ref": "ConsumerSecurityGroup"
+            },
+            "Description": "security group for consumers"
+        },
+        "PaymenyMethodTableName": {
+            "Value": {
+                "Ref": "PaymentAccountTable"
+            },
+            "Description": "Payment method Table name"
+        }
+    }
+}

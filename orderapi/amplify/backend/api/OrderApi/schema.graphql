@@ -1,0 +1,20 @@
+type Order 
+	@model(mutations: { create : "addOrder", delete: "cancelOrder"}, subscriptions: {onCreate: ["addedOrder"], onDelete: ["cancelledOrder"]})
+	@auth(rules: [{allow: private, provider: iam}])
+	@key(fields: ["userId", "orderDateTime", "status"] ) {
+	userId: ID!
+	status: Status!
+	orderDateTime: String!
+	details: String!
+	orderId: String!
+}
+
+
+enum Status {
+	DELIVERED
+	IN_TRANSIT
+	PENDING
+	PROCESSING
+	CANCELLED
+}
+

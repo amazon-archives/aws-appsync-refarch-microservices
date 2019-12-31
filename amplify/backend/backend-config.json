@@ -1,0 +1,36 @@
+{
+	"auth": {
+		"storeapp039c491c": {
+			"service": "Cognito",
+			"providerPlugin": "awscloudformation",
+			"dependsOn": []
+		}
+	},
+	"api": {
+		"StoreApi": {
+			"service": "AppSync",
+			"providerPlugin": "awscloudformation",
+			"output": {
+				"authConfig": {
+					"additionalAuthenticationProviders": [],
+					"defaultAuthentication": {
+						"authenticationType": "AMAZON_COGNITO_USER_POOLS",
+						"userPoolConfig": {
+							"userPoolId": "authstoreapp039c491c"
+						}
+					}
+				}
+			}
+		}
+	},
+	"payment": {
+		"service": {
+			"providerPlugin": "awscloudformation"
+		}
+	},
+	"user" : {
+		"service" : {
+			"providerPlugin": "awscloudformation"
+		}
+	}
+}

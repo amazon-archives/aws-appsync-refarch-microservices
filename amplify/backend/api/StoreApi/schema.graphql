@@ -1,0 +1,56 @@
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}
+
+type User {
+	userName: ID!
+	email: String
+	phoneNumber: String
+}
+
+type Order {
+	userId: ID!
+	status: OrderStatus
+	orderDateTime: String!
+	details: String!
+	orderId: String
+}
+
+
+type PaymentAccount {
+  userId: ID!
+  type: String!
+  details: String!
+}
+
+type Query {
+  getPaymentAccounts(userId: ID!): [PaymentAccount]
+  getUserInfo(userName: ID!): User
+  listRecentOrders(userId: ID!, orderDateTime: String!) : [Order]
+  listRecentOrdersByStatus(userId: ID!, orderDateTime: String!, status: OrderStatus! ) : [Order]
+
+}
+
+enum OrderStatus {
+	DELIVERED
+	IN_TRANSIT
+	PENDING
+	PROCESSING
+	CANCELLED
+}
+
+type Mutation {
+  addPaymentAccount(userId: ID!, paymentAccountType: String!, paymentAccountDetails: String!): PaymentAccount
+  addOrder(userId: ID!, orderDateTime: String!, details: String!) : Order
+}
+
+type Subscription {
+  addedPaymentAccount: PaymentAccount
+  @aws_subscribe(mutations: ["addPaymentAccount"])
+
+  addedOrder: Order
+  @aws_subscribe(mutations: ["addOrder"])
+
+}

@@ -1,0 +1,54 @@
+{
+    "AppSyncApiName": "StoreApi",
+    "DynamoDBBillingMode": "PAY_PER_REQUEST",
+    "DynamoDBEnableServerSideEncryption": "false",
+    "AuthCognitoUserPoolId": {
+        "Fn::GetAtt": [
+            "authstoreapp039c491c",
+            "Outputs.UserPoolId"
+        ]
+    },
+    "UserServiceEndpoint": {
+        "Fn::GetAtt": [
+            "userservice",
+            "Outputs.UserServiceEndpoint"
+        ]
+    },
+    "UserServiceApiId": {
+        "Fn::GetAtt": [
+            "userservice",
+            "Outputs.UserServiceApiId"
+        ]
+    },
+    "PaymentServiceEndpoint": {
+        "Fn::GetAtt": [
+            "paymentservice",
+            "Outputs.PaymentServiceEndpoint"
+        ]
+    },
+    "PaymentServiceConsumerSecurityGroup": {
+        "Fn::GetAtt": [
+            "paymentservice",
+            "Outputs.ConsumerSecurityGroup"
+        ]
+    },
+    "PaymentServiceConsumerSubnet01": {
+        "Fn::GetAtt": [
+            "paymentservice",
+            "Outputs.ConsumerSubnet01"
+        ]
+    },
+    "PaymentServiceConsumerSubnet02": {
+        "Fn::GetAtt": [
+            "paymentservice",
+            "Outputs.ConsumerSubnet02"
+        ]
+    },
+    "CognitoUserPoolId": {
+        "Fn::GetAtt": [
+            "authstoreapp039c491c",
+            "Outputs.UserPoolId"
+        ]
+    },
+    "OrderServiceEndpoint": "https://www.amazon.com"
+}

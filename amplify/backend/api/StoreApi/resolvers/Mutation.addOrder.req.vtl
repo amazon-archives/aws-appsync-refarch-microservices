@@ -1,0 +1,40 @@
+#**
+Make an arbitrary HTTP call when this field is listed in a query selection set.
+The "relativePath" is the resource path relative to the root URL provided when you
+created the HTTP data source. Pass a "params" object to forward headers, body,
+and query parameters to the HTTP endpoint.
+*#
+#if($context.identity.sub == $context.args.userId) 
+#set($order = "mutation AddOrder {
+  addOrder(input : {
+    userId: ""$context.args.userId""
+    status: PENDING
+    orderDateTime: ""$context.args.orderDateTime""
+    details: ""$context.args.details""
+    orderId: ""$util.autoId()""
+  }) {
+    userId
+    status
+    orderDateTime
+    details
+    orderId
+  }
+}")
+
+{
+    "version": "2018-05-29",
+    "method": "POST",
+    "resourcePath": "/graphql",
+    "params":{
+        "body": {
+        	"query": "$util.escapeJavaScript($order)"
+        },
+        "headers":{
+            "Content-Type": "application/json",
+            "x-access-token" : "$context.request.headers.x-access-token"
+        }
+    }
+}
+#else 
+  $utils.unauthorized() 
+#end

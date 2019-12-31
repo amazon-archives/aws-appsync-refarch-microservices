@@ -1,0 +1,20 @@
+#**
+The value of 'payload' after the template has been evaluated
+will be passed as the event to AWS Lambda.
+*#
+#if($context.identity.sub == $context.args.userId) 
+{
+  "version" : "2017-02-28",
+  "operation": "Invoke",
+  "payload": {
+  	"userId" : $util.toJson($context.args.userId),
+    "type" : $util.toJson($context.args.paymentAccountType),
+    "details":  $util.toJson($context.args.paymentAccountDetails),    
+    "resolverType" : "Mutation",
+    "fieldName" : "addPaymentAccount"
+   
+  }
+}
+#else 
+  $utils.unauthorized() 
+#end

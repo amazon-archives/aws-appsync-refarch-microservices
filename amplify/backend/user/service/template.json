@@ -1,0 +1,233 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Root stack for the Amplify AWS CloudFormation provider",
+    "Parameters": {
+        "env": {
+            "Type": "String",
+            "Description": "The environment name. e.g. Dev, Test, or Production",
+            "Default": "NONE"
+        },
+        "CognitoUserPoolId": {
+            "Type": "String",
+            "Description": "Cognito User pool Id. User service will fetch details from this pool",
+            "Default": ""
+        }
+    },
+    "Resources": {
+        "UserApi": {
+            "Type": "AWS::ApiGateway::RestApi",
+            "Properties": {
+                "Name": "Users API",
+                "Description": "API used for retrieving User details",
+                "EndpointConfiguration": {
+                    "Types": [
+                        "REGIONAL"
+                    ]
+                }
+            }
+        },
+        "UserInfoLambda": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Code": {
+                    "ZipFile": "\nimport json\nimport xml.etree.ElementTree as ET\nimport os\nimport logging \nimport boto3\nimport sys\n\ncognito_client = boto3.client('cognito-idp')\n\nLOG_LEVEL = os.environ.get('LOG_LEVEL', '').upper()\nif LOG_LEVEL == '':\n  LOG_LEVEL = 'INFO'\n\nlogger = logging.getLogger()\nlogger.setLevel(LOG_LEVEL)\n\ndef lambda_handler(event,context):\n  logging.info('Incoming Event: {0}'.format(event))\n  body = ET.Element('body')\n  userName = event['params']['path']['userName'] \n  \n  user_attributes = {}\n\n  try:\n    get_user_response = cognito_client.get_user(AccessToken=event['params']['header']['x-access-token'])\n    logging.info('get_user_response: {0}'.format(get_user_response)) \n    \n    if get_user_response['ResponseMetadata']['HTTPStatusCode'] == 200:\n\n      for attr in get_user_response['UserAttributes']:\n        user_attributes[attr['Name']] = attr['Value']\n\n      details = ET.SubElement(body, 'userDetails') \n      \n      ET.SubElement(details, 'userName').text = userName\n    \n      ET.SubElement(details, 'email').text = user_attributes['email']\n      ET.SubElement(details, 'phoneNumber').text = user_attributes['phone_number'] \n\n  except:\n    error = ET.SubElement(body, 'error') \n    ET.SubElement(error, 'message').text  = str(sys.exc_info()[1])\n\n  return ET.tostring(body)\n"
+                },
+                "Description": "function to retrive User info",
+                "FunctionName": {
+                    "Fn::Sub": "${env}-UserInfoLambda"
+                },
+                "Handler": "index.lambda_handler",
+                "MemorySize": 512,
+                "Timeout": 5,
+                "Role": {
+                    "Fn::GetAtt": [
+                        "UserInfoLambdaExecutionRole",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "python3.7",
+                "Environment": {
+                    "Variables": {
+                        "LOG_LEVEL": "INFO",
+                        "COGNITO_USER_POOL_ID": {
+                            "Ref": "CognitoUserPoolId"
+                        }
+                    }
+                }
+            }
+        },
+        "UserInfoLambdaExecutionRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "lambda.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "ManagedPolicyArns": [
+                    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+                ],
+                "Policies": [
+                    {
+                        "PolicyName": {
+                            "Fn::Sub": "${env}UserInfoLambdaPolicy"
+                        },
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "cognito-idp:GetUser"
+                                    ],
+                                    "Resource": {
+                                        "Fn::Sub": "arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${CognitoUserPoolId}"
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "UserInfoLambdaPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:invokeFunction",
+                "FunctionName": {
+                    "Fn::GetAtt": [
+                        "UserInfoLambda",
+                        "Arn"
+                    ]
+                },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${UserApi}/*"
+                }
+            }
+        },
+        "UserApiStage": {
+            "Type": "AWS::ApiGateway::Stage",
+            "Properties": {
+                "DeploymentId": {
+                    "Ref": "UserApiDeployment"
+                },
+                "RestApiId": {
+                    "Ref": "UserApi"
+                },
+                "StageName": {
+                    "Ref": "env"
+                }
+            }
+        },
+        "UserApiDeployment": {
+            "Type": "AWS::ApiGateway::Deployment",
+            "DependsOn": [
+                "UserApiHistoryResourceGET"
+            ],
+            "Properties": {
+                "RestApiId": {
+                    "Ref": "UserApi"
+                }
+            }
+        },
+        "UserApiHistoryResource": {
+            "Type": "AWS::ApiGateway::Resource",
+            "Properties": {
+                "RestApiId": {
+                    "Ref": "UserApi"
+                },
+                "ParentId": {
+                    "Fn::GetAtt": [
+                        "UserApi",
+                        "RootResourceId"
+                    ]
+                },
+                "PathPart": "user"
+            }
+        },
+        "UserApiHistoryResourceParameter": {
+            "Type": "AWS::ApiGateway::Resource",
+            "Properties": {
+                "RestApiId": {
+                    "Ref": "UserApi"
+                },
+                "ParentId": {
+                    "Ref": "UserApiHistoryResource"
+                },
+                "PathPart": "{userName}"
+            }
+        },
+        "UserApiHistoryResourceGET": {
+            "Type": "AWS::ApiGateway::Method",
+            "Properties": {
+                "AuthorizationType": "AWS_IAM",
+                "HttpMethod": "GET",
+                "MethodResponses": [
+                    {
+                        "StatusCode": 200,
+                        "ResponseParameters": {
+                            "method.response.header.Content-Type": true
+                        }
+                    }
+                ],
+                "Integration": {
+                    "Type": "AWS",
+                    "PassthroughBehavior": "WHEN_NO_TEMPLATES",
+                    "IntegrationHttpMethod": "POST",
+                    "Uri": {
+                        "Fn::Sub": "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${UserInfoLambda.Arn}/invocations"
+                    },
+                    "RequestTemplates": {
+                        "application/xml": "#set($allParams = $input.params())\n{\n\"params\" : {\n#foreach($type in $allParams.keySet())\n    #set($params = $allParams.get($type))\n\"$type\" : {\n    #foreach($paramName in $params.keySet())\n    \"$paramName\" : \"$util.escapeJavaScript($params.get($paramName))\"\n        #if($foreach.hasNext),#end\n    #end\n}\n    #if($foreach.hasNext),#end\n#end\n}\n}\n"
+                    },
+                    "IntegrationResponses": [
+                        {
+                            "StatusCode": 200,
+                            "ResponseTemplates": {
+                                "application/xml": "#set($inputRoot = $input.path('$')) \n$inputRoot"
+                            },
+                            "ResponseParameters": {
+                                "method.response.header.Content-Type": "'application/xml'"
+                            }
+                        }
+                    ]
+                },
+                "RequestParameters": {
+                    "method.request.path.userName": true
+                },
+                "ResourceId": {
+                    "Ref": "UserApiHistoryResourceParameter"
+                },
+                "RestApiId": {
+                    "Ref": "UserApi"
+                }
+            }
+        }
+    },
+    "Outputs": {
+        "UserServiceEndpoint": {
+            "Value": {
+                "Fn::Sub": "https://${UserApi}.execute-api.${AWS::Region}.amazonaws.com"
+            },
+            "Description": "User Service Endpoint"
+        },
+        "UserServiceApiId": {
+            "Value": {
+                "Ref": "UserApi"
+            },
+            "Description": "User API Id"
+        }
+    }
+}

@@ -1,0 +1,10 @@
+## return the body
+#if($ctx.result.statusCode == 200)
+    ##if response is 200
+    ## Because the response is of type XML, we are going to convert
+    ## the result body as a map and only get the User object.
+    $utils.toJson($utils.xml.toMap($ctx.result.body).body.userDetails)
+#else
+    ##if response is not 200, return response
+    $ctx.result.body
+#end

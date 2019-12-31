@@ -1,0 +1,38 @@
+version: 0.1
+backend:
+  phases:
+    build:
+      commands:
+        - echo "# update aws cli "
+        - npm install -g @aws-amplify/cli
+        - echo "# install jq"
+        - yum install jq -y
+        - echo "# cd orderapi"
+        - cd orderapi
+        - ./deploy_OrderApi.sh
+        - echo "# Get Order API Endpoint"
+        - export GRAPHQL_ENDPOINT=$(jq -r '.api[(.api | keys)[0]].output.GraphQLAPIEndpointOutput' ./amplify/#current-cloud-backend/amplify-meta.json)
+        - echo "# Get domain name from endpoint"
+        - export GRAPHQL_ENDPOINT=$(echo $GRAPHQL_ENDPOINT | cut -d / -f 1-3)
+        - echo "# Print domain name"
+        - echo $GRAPHQL_ENDPOINT
+        - echo "# Back to root folder"
+        - cd ..
+        - echo "# Pass order API endpoint to Store app"
+        - jq '.OrderServiceEndpoint = $newVal' --arg newVal $GRAPHQL_ENDPOINT ./amplify/backend/api/StoreApi/parameters.json > ./amplify/backend/api/StoreApi/parameters_tmp.json && mv ./amplify/backend/api/StoreApi/parameters_tmp.json ./amplify/backend/api/StoreApi/parameters.json
+        - amplifyPush --simple
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - npm install
+    build:
+      commands:
+        - npm run build
+  artifacts:
+    baseDirectory: build
+    files:
+      - "**/*"
+  cache:
+    paths:
+      - node_modules/**/*
