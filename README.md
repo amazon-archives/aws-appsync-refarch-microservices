@@ -95,33 +95,42 @@ The sample app is based on a very simple webstore where users can login, and int
 cd appsync-refarch-microserviceaccesslayer && npm install
 ```
 
-3. Import the backend environment deployed by the Amplify Console to your repo (the `amplify/team-provider.json` file contains information on all backend environments in your AWS account). Click on "More Info" in the screenshot below to copy the `amplify env import` command from the Amplify Console. 
+3. Select your app in amplify console. All Apps -> aws-appsync-refarch-microservices -> Backend Environment -> (extend) Edit backend at the bottom.
 
 ![connect_local_to_cloud_backend](images/connect_local_to_cloud_backend.png)
 
 
-4. Paste this command into your terminal at the root of your repo. You should see the `amplify/team-provider.json` updated with a backend named `amplify`.
+4. Paste this command into your terminal at the root of your repo (when prompted accept defaults for runtime and source path)
 
   ```
-  amplify env import --name amplify --config "{<stack>}" --awsInfo "{<profile>}" --yes
+  amplify pull --appId <app-id-from-console> --envName <env-name>
 
-  Successfully added environment from your project
+  ? Do you want to use an AWS profile? Yes
+  ? Please choose the profile you want to use default
+  Amplify AppID found: xxxxxx1234sd. Amplify App name is: aws-appsync-refarch-microservices}
+  Backend environment master found in Amplify Console app: aws-appsync-refarch-microservices
+  ? Choose your default editor: Visual Studio Code
+  ? Choose the type of app that you're building javascript
+  Please tell us about your project
+  ? What javascript framework are you using react
+  ? Source Directory Path:  src
+  ? Distribution Directory Path: build
+  ? Build Command:  npm run-script build
+  ? Start Command: npm run-script start
+
+  ? Do you plan on modifying this backend? Yes
+
+  Successfully pulled backend environment master from the cloud.
+  Run 'amplify pull' to sync upstream changes.
+
   ```
 
-5. Initialize the Amplify CLI with the `amplify` environment.
-
-  ```
-  amplify init
-  ? Do you want to use an existing environment? Yes
-  ? Choose the environment you would like to use: (Use arrow keys)
-  > master
-  ```
-
-6. Run locally
+5. Start and work on your front end locally. This will connect to the backend deployed in AWS.
 
   ```
   npm start
   ```
+
 
 ## Clean up 
 
